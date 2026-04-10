@@ -1,1 +1,182 @@
-code
+# python code 
+import xlrd
+import math
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from sklearn.preprocessing import MinMaxScaler
+from scipy import stats
+import statsmodels.formula.api as smf
+
+def get_log(c):
+    i=0
+    e=[]
+    while i< len(c):
+        s=math.log(c[i])
+        e.append(s)
+        i+=1
+    return e
+
+def get_log2(x):
+    i=0
+    e=[]
+    while i< x.shape[1]:
+        cc=list(x[:,i])
+        s=get_log(c=cc)
+        e.append(s)
+        i+=1
+    ex=np.array(e).T
+    return ex
+
+fd0 = xlrd.open_workbook('/Users/zhangzhipeng/Desktop/AI-感知/voice-per.xlsx')
+fdsheet0 = fd0.sheet_by_index(0)
+voice=fdsheet0.col_values(1)[1:]
+y=fdsheet0.col_values(11)[1:]
+pt=fdsheet0.col_values(16)[1:]
+
+m1=fdsheet0.col_values(12)[1:]
+m2=fdsheet0.col_values(13)[1:]
+
+p=fdsheet0.col_values(9)[1:]
+d=fdsheet0.col_values(4)[1:]
+f=fdsheet0.col_values(10)[1:]
+tl=fdsheet0.col_values(14)[1:]
+gender=fdsheet0.col_values(17)[1:]
+
+m1=get_log(c=m1)
+p=get_log(c=p)
+d=get_log(c=d)
+Xs=np.array([y,voice,m2,m1,p,d,f,tl,gender]).T
+
+
+
+day=fdsheet0.col_values(18)[1:]
+
+data = {'X': y,  'Y': day}
+df = pd.DataFrame(data)
+p_c, p_v = stats.spearmanr(df['X'], df['Y'])
+print(p_c, p_v)
+
+###整体
+Xs=np.array([y,voice,pt,p,d,f,tl,gender]).T
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),'x7':list(X[:,7]),
+    'x2': list(X[:,2]),'x3':list(X[:,3]),'x4':list(X[:,4]),'x5':list(X[:,5]),'x6': list(X[:,6])})
+model = smf.ols('target ~  x1 + x2 + x3 + x4 + x5 +x6 +x7', data=df).fit()
+print(model.summary())
+
+
+Xs=np.array([y,voice,pt,p,d,f,tl,gender]).T
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'Z': list(X[:,2]),
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),'x6':list(X[:,7]),
+    'x2': list(X[:,3]),'x3':list(X[:,4]),'x4':list(X[:,5]),'x5':list(X[:,6])})
+model = smf.ols('target ~ Z + x1 + x3 + x2 + x4 + x5 +x6 + Z * x1', data=df).fit()
+print(model.summary())
+
+#
+
+
+######体验
+ind = [index for index, value in enumerate(pt) if value ==1]
+indo = [index for index, value in enumerate(pt) if value ==0]
+
+## x-y
+Xs=(np.array([y,voice,p,d,f,tl,gender]).T)[ind,:]
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),
+    'x2': list(X[:,2]),'x3':list(X[:,3]),'x4':list(X[:,4]),'x5':list(X[:,5]),'x6': list(X[:,6])})
+model = smf.ols('target ~  x1 + x2 + x3 + x4 + x5 +x6', data=df).fit()
+print(model.summary())
+## x-m2温暖
+Xs=(np.array([m2,voice,p,d,f,tl,gender]).T)[ind,:]
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),
+    'x2': list(X[:,2]),'x3':list(X[:,3]),'x4':list(X[:,4]),'x5':list(X[:,5]),'x6': list(X[:,6])})
+model = smf.ols('target ~  x1 + x2 + x3 + x4 + x5 +x6', data=df).fit()
+print(model.summary())
+#### m2，m1--y
+Xs=(np.array([y,voice,m2,m1,p,d,f,tl,gender]).T)[ind,:]
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),'x7':list(X[:,7]),'x8':list(X[:,8]),
+    'x2': list(X[:,2]),'x3':list(X[:,3]),'x4':list(X[:,4]),'x5':list(X[:,5]),'x6': list(X[:,6])})
+model = smf.ols('target ~  x1 + x2 + x3 + x4 + x5 +x6 +x7 +x8', data=df).fit()
+print(model.summary())
+
+###中介
+import statsmodels.formula.api as smf
+def bootstrap_mediation(df, n_bootstraps=1000):
+    bootstrap_effects = []
+    for _ in range(n_bootstraps):
+        sample = df.sample(frac=1, replace=True)
+        # model 2: M ~ X
+        X2_sample = sm.add_constant(sample['X'])
+        model2_sample = sm.OLS(sample['M'], X2_sample).fit()
+        b_x_m = model2_sample.params[1]  # The coefficient of X to M
+        # model 3: Y ~ X + M
+        X3_sample = sm.add_constant(sample[['X', 'M']])
+        model3_sample = sm.OLS(sample['Y'], X3_sample).fit()
+        b_m_y = model3_sample.params[2]  # The coefficient of M to Y
+        # Mediating effect
+        indirect_effect = b_x_m * b_m_y
+        bootstrap_effects.append(indirect_effect)
+    # Calculate the confidence interval
+    lower_bound = np.percentile(bootstrap_effects, 5)
+    upper_bound = np.percentile(bootstrap_effects, 95)
+    return indirect_effect, lower_bound, upper_bound
+####
+Xs=(np.array([m2,voice,y]).T)[ind,:]
+X = MinMaxScaler().fit_transform(Xs)
+
+data = {
+    'X': list(X[:,1]),  # Independent variable
+    'M': list(X[:,0]),  # Mediating variable
+    'Y': list(X[:,2])   # Dependent variable
+}
+df = pd.DataFrame(data)
+# bootstrap test
+indirect_effect,lower_bound, upper_bound = bootstrap_mediation(df)
+print(indirect_effect,lower_bound,upper_bound)
+
+#0.014112068338105571 0.00743075929922176 0.023204688495235683
+
+
+
+###鲁棒性
+Xs=np.array([y,voice,pt,p,d,f,tl,gender,day]).T
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),'x7':list(X[:,7]),'x8':list(X[:,8]),
+    'x2': list(X[:,2]),'x3':list(X[:,3]),'x4':list(X[:,4]),'x5':list(X[:,5]),'x6': list(X[:,6])})
+model = smf.ols('target ~  x1 + x2 + x3 + x4 + x5 +x6 +x7 +x8', data=df).fit()
+print(model.summary())
+
+glm_model = smf.glm('target ~  x1 + x2 + x3 +  x4 + x5 + x6 + x7 + x8', data=df,
+                    family=sm.families.Tweedie()).fit()
+print(glm_model.summary())
+
+
+Xs=np.array([y,voice,pt,p,d,f,tl,gender,day]).T
+X = MinMaxScaler().fit_transform(Xs)
+df = pd.DataFrame({
+    'Z': list(X[:,2]),
+    'target': list(X[:,0]),
+    'x1': list(X[:,1]),'x6':list(X[:,7]),'x7':list(X[:,8]),
+    'x2': list(X[:,3]),'x3':list(X[:,4]),'x4':list(X[:,5]),'x5':list(X[:,6])})
+model = smf.ols('target ~ Z + x1 + x2 + x3 + x4 + x5 +x6 + x7+ Z * x1', data=df).fit()
+print(model.summary())
+glm_model = smf.glm('target ~  Z + x1 + x2 + x3 + x4 + x5 +x6 + x7+ Z * x1', data=df,
+                    family=sm.families.Tweedie()).fit()
+print(glm_model.summary())
+
